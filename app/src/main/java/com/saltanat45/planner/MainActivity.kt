@@ -6,13 +6,10 @@ import android.os.Bundle
 import android.graphics.Color
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.*
 import android.content.Context
 import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : Activity() {
 
@@ -21,12 +18,14 @@ class MainActivity : Activity() {
     private val cream = Color.rgb(246, 245, 238)
 
     private val goals = mutableListOf<String>()
+    private val tasks = mutableListOf<JSONObject>()
     private lateinit var goalCount: TextView
+    private lateinit var taskCount: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         loadGoals()
+        loadTasks()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -39,174 +38,290 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             setBackgroundColor(green)
-            setPadding(20, 36, 20, 36)
+            setPadding(20, 32, 20, 32)
         }
         root.addView(header)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 18, 18, 24)
+            setPadding(18, 12, 18, 24)
         }
 
         addText(content, "તમારા સપનાની સફર અહીંથી શરૂ થાય છે", 18f, green)
-        addText(
-            content,
-            "તમારા જીવનના બધા લક્ષ્યો, કામ અને ખર્ચનું એક જ સ્થાન.",
-            15f,
-            Color.DKGRAY
-        )
-
-        addText(content, "━━━━━━━━━━━━━━━━━━", 16f, gold)
-        addText(content, "📊 મારો ડેશબોર્ડ", 22f, green)
 
         goalCount = TextView(this).apply {
-            textSize = 17f
+            textSize = 16f
             setTextColor(green)
-            setPadding(4, 10, 4, 10)
+            setPadding(4, 8, 4, 8)
         }
         content.addView(goalCount)
-        updateGoalCount()
 
-        addButton(content, "🎯 મારા લક્ષ્યો") {
-            showGoalsDialog()
+        taskCount = TextView(this).apply {
+            textSize = 16f
+            setTextColor(green)
+            setPadding(4, 8, 4, 8)
         }
+        content.addView(taskCount)
+        updateCounts()
 
-        addButton(content, "✅ કામ અને પ્રોગ્રેસ") {
-            showMessage("કામ અને પ્રોગ્રેસની સુવિધા આગળના તબક્કામાં બનાવશું.")
-        }
+        addButton(content, "🎯 મારા લક્ષ્યો") { showGoals() }
+        addButton(content, "➕ નવું કામ ઉમેરો") { addTaskDialog() }
+        addButton(content, "✅ મારાં કામ અને પ્રોગ્રેસ") { showTasks() }
+        addButton(content, "💰 કુલ ખર્ચ") { showTotalCost() }
+        addButton(content, "📔 નોંધો અને અનુભવો") { showNotes() }
 
-        addButton(content, "💰 બજેટ અને ખર્ચ") {
-            showMessage("બજેટ અને ખર્ચની સુવિધા આગળ બનાવશું.")
-        }
-
-        addButton(content, "📔 અનુભવ અને નોંધો") {
-            showMessage("નોંધો અને અનુભવોની સુવિધા આગળ બનાવશું.")
-        }
-
-        addButton(content, "📷 ફોટા અને વીડિયો") {
-            showMessage("ફોટા અને વીડિયો જોડવાની સુવિધા આગળ બનાવશું.")
-        }
-
-        addButton(content, "💾 બેકઅપ અને રિસ્ટોર") {
-            showMessage("બેકઅપ અને રિસ્ટોરની સુવિધા આગળ બનાવશું.")
-        }
-
-        addText(
-            content,
-            "તમારો પ્લાન. તમારી પ્રગતિ. તમારું ભવિષ્ય.",
-            14f,
-            green
-        )
+        addText(content, "તમારો પ્લાન. તમારી પ્રગતિ. તમારું ભવિષ્ય.", 14f, green)
 
         val scroll = ScrollView(this)
         scroll.addView(content)
-
         root.addView(
             scroll,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
         )
-
         setContentView(root)
     }
 
-    private fun showGoalsDialog() {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 12, 24, 4)
-        }
-
-        val input = EditText(this).apply {
-            hint = "નવું લક્ષ્ય લખો"
-            textSize = 16f
-        }
-        layout.addView(input)
-
-        val list = TextView(this).apply {
-            textSize = 16f
-            setTextColor(green)
-            setPadding(0, 16, 0, 8)
-            text = if (goals.isEmpty()) {
-                "હજુ કોઈ લક્ષ્ય ઉમેર્યું નથી."
-            } else {
-                goals.mapIndexed { index, goal ->
-                    "${index + 1}. $goal"
-                }.joinToString("\n\n")
-            }
-        }
-        layout.addView(list)
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("🎯 મારા લક્ષ્યો")
-            .setView(layout)
-            .setPositiveButton("લક્ષ્ય ઉમેરો", null)
-            .setNegativeButton("બંધ કરો", null)
-            .create()
-
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-                .setOnClickListener {
-                    val newGoal = input.text.toString().trim()
-
-                    if (newGoal.isEmpty()) {
-                        input.error = "પહેલાં લક્ષ્ય લખો"
-                    } else {
-                        goals.add(newGoal)
-                        saveGoals()
-                        updateGoalCount()
-                        dialog.dismiss()
-                        showMessage("લક્ષ્ય ફોનમાં સાચવાઈ ગયું ✅")
-                    }
-                }
-        }
-
-        dialog.show()
-    }
+    private fun prefs() = getSharedPreferences(
+        "saltanat45_data", Context.MODE_PRIVATE
+    )
 
     private fun loadGoals() {
-        val prefs = getSharedPreferences(
-            "saltanat45_data",
-            Context.MODE_PRIVATE
-        )
-        val saved = prefs.getString("goals", "[]") ?: "[]"
-
+        goals.clear()
         try {
-            val array = JSONArray(saved)
-            for (i in 0 until array.length()) {
-                goals.add(array.getString(i))
-            }
-        } catch (_: Exception) {
-            goals.clear()
-        }
+            val array = JSONArray(prefs().getString("goals", "[]"))
+            for (i in 0 until array.length()) goals.add(array.getString(i))
+        } catch (_: Exception) {}
     }
 
     private fun saveGoals() {
         val array = JSONArray()
         goals.forEach { array.put(it) }
-
-        getSharedPreferences(
-            "saltanat45_data",
-            Context.MODE_PRIVATE
-        ).edit()
-            .putString("goals", array.toString())
-            .apply()
+        prefs().edit().putString("goals", array.toString()).apply()
     }
 
-    private fun updateGoalCount() {
+    private fun loadTasks() {
+        tasks.clear()
+        try {
+            val array = JSONArray(prefs().getString("tasks", "[]"))
+            for (i in 0 until array.length()) tasks.add(array.getJSONObject(i))
+        } catch (_: Exception) {}
+    }
+
+    private fun saveTasks() {
+        val array = JSONArray()
+        tasks.forEach { array.put(it) }
+        prefs().edit().putString("tasks", array.toString()).apply()
+    }
+
+    private fun updateCounts() {
         goalCount.text = "🎯 કુલ લક્ષ્યો: ${goals.size}"
+        taskCount.text = "✅ કુલ કામ: ${tasks.size}"
+    }
+
+    private fun showGoals() {
+        val input = EditText(this).apply { hint = "નવું લક્ષ્ય લખો" }
+
+        AlertDialog.Builder(this)
+            .setTitle("🎯 મારા લક્ષ્યો")
+            .setMessage(
+                if (goals.isEmpty()) "હજુ કોઈ લક્ષ્ય નથી."
+                else goals.mapIndexed { i, g -> "${i + 1}. $g" }
+                    .joinToString("\n")
+            )
+            .setView(input)
+            .setPositiveButton("ઉમેરો") { _, _ ->
+                val value = input.text.toString().trim()
+                if (value.isNotEmpty()) {
+                    goals.add(value)
+                    saveGoals()
+                    updateCounts()
+                    toast("લક્ષ્ય સાચવાયું ✅")
+                }
+            }
+            .setNegativeButton("બંધ", null)
+            .show()
+    }
+
+    private fun addTaskDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 8, 28, 4)
+        }
+
+        val name = EditText(this).apply { hint = "કામનું નામ" }
+        form.addView(name)
+
+        val goal = EditText(this).apply {
+            hint = "સંબંધિત લક્ષ્ય (વૈકલ્પિક)"
+        }
+        form.addView(goal)
+
+        val cost = EditText(this).apply {
+            hint = "ખર્ચ રૂપિયા (ન હોય તો 0)"
+            inputType = 8194
+            setText("0")
+        }
+        form.addView(cost)
+
+        val notes = EditText(this).apply {
+            hint = "નોંધ અથવા અનુભવ"
+            minLines = 2
+            gravity = Gravity.TOP
+        }
+        form.addView(notes)
+
+        AlertDialog.Builder(this)
+            .setTitle("➕ નવું કામ")
+            .setView(form)
+            .setPositiveButton("સાચવો") { _, _ ->
+                val taskName = name.text.toString().trim()
+                val amount = cost.text.toString().toDoubleOrNull()
+
+                if (taskName.isEmpty()) {
+                    toast("કામનું નામ લખો")
+                } else if (amount == null || amount < 0) {
+                    toast("ખર્ચની રકમ બરાબર લખો")
+                } else {
+                    val task = JSONObject().apply {
+                        put("name", taskName)
+                        put("goal", goal.text.toString().trim())
+                        put("cost", amount)
+                        put("notes", notes.text.toString().trim())
+                        put("progress", 0)
+                        put("status", "શરૂ કરવાનું બાકી")
+                    }
+                    tasks.add(task)
+                    saveTasks()
+                    updateCounts()
+                    toast("કામ સાચવાઈ ગયું ✅")
+                }
+            }
+            .setNegativeButton("રદ કરો", null)
+            .show()
+    }
+
+    private fun showTasks() {
+        if (tasks.isEmpty()) {
+            toast("હજુ કોઈ કામ ઉમેર્યું નથી.")
+            return
+        }
+
+        val items = tasks.mapIndexed { i, t ->
+            "${i + 1}. ${t.optString("name")} — ${t.optInt("progress")}%"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("✅ મારાં કામ")
+            .setItems(items) { _, which -> editTask(which) }
+            .setNegativeButton("બંધ", null)
+            .show()
+    }
+
+    private fun editTask(index: Int) {
+        val task = tasks[index]
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 8, 28, 4)
+        }
+
+        val progress = EditText(this).apply {
+            hint = "પ્રોગ્રેસ 0 થી 100"
+            inputType = 2
+            setText(task.optInt("progress").toString())
+        }
+        form.addView(progress)
+
+        val statuses = arrayOf(
+            "શરૂ કરવાનું બાકી", "ચાલુ છે", "પૂર્ણ થયું", "થોભાવ્યું"
+        )
+        val spinner = Spinner(this)
+        spinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            statuses
+        )
+        val oldStatus = task.optString("status", statuses[0])
+        spinner.setSelection(statuses.indexOf(oldStatus).coerceAtLeast(0))
+        form.addView(spinner)
+
+        val cost = EditText(this).apply {
+            hint = "કુલ ખર્ચ રૂપિયા"
+            inputType = 8194
+            setText(task.optDouble("cost", 0.0).toString())
+        }
+        form.addView(cost)
+
+        val notes = EditText(this).apply {
+            hint = "નોંધ અને અનુભવ"
+            minLines = 2
+            gravity = Gravity.TOP
+            setText(task.optString("notes"))
+        }
+        form.addView(notes)
+
+        AlertDialog.Builder(this)
+            .setTitle(task.optString("name"))
+            .setView(form)
+            .setPositiveButton("સાચવો") { _, _ ->
+                val p = progress.text.toString().toIntOrNull()
+                val c = cost.text.toString().toDoubleOrNull()
+
+                if (p == null || p !in 0..100 || c == null || c < 0) {
+                    toast("પ્રોગ્રેસ 0-100 અને ખર્ચ યોગ્ય લખો")
+                } else {
+                    task.put("progress", p)
+                    task.put("status", spinner.selectedItem.toString())
+                    task.put("cost", c)
+                    task.put("notes", notes.text.toString())
+                    saveTasks()
+                    updateCounts()
+                    toast("કામની વિગતો સાચવાઈ ✅")
+                }
+            }
+            .setNeutralButton("કામ કાઢી નાખો") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setMessage("આ કામ કાઢી નાખવું છે?")
+                    .setPositiveButton("હા") { _, _ ->
+                        tasks.removeAt(index)
+                        saveTasks()
+                        updateCounts()
+                        toast("કામ કાઢી નાખ્યું")
+                    }
+                    .setNegativeButton("ના", null)
+                    .show()
+            }
+            .setNegativeButton("રદ કરો", null)
+            .show()
+    }
+
+    private fun showTotalCost() {
+        val total = tasks.sumOf { it.optDouble("cost", 0.0) }
+        toast("બધાં કામનો કુલ ખર્ચ: ₹${"%.2f".format(total)}")
+    }
+
+    private fun showNotes() {
+        val notes = tasks.mapNotNull {
+            val note = it.optString("notes").trim()
+            if (note.isNotEmpty()) "${it.optString("name")}\n$note" else null
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("📔 નોંધો અને અનુભવો")
+            .setMessage(
+                if (notes.isEmpty()) "હજુ કોઈ નોંધ નથી."
+                else notes.joinToString("\n\n──────────\n\n")
+            )
+            .setPositiveButton("બરાબર", null)
+            .show()
     }
 
     private fun addText(
-        parent: LinearLayout,
-        value: String,
-        size: Float,
-        color: Int
+        parent: LinearLayout, value: String, size: Float, color: Int
     ) {
         val text = TextView(this).apply {
-            text = value
+            this.text = value
             textSize = size
             setTextColor(color)
             setPadding(4, 12, 4, 12)
@@ -215,9 +330,7 @@ class MainActivity : Activity() {
     }
 
     private fun addButton(
-        parent: LinearLayout,
-        label: String,
-        action: () -> Unit
+        parent: LinearLayout, label: String, action: () -> Unit
     ) {
         val button = Button(this).apply {
             text = label
@@ -225,7 +338,6 @@ class MainActivity : Activity() {
             setTextColor(green)
             setOnClickListener { action() }
         }
-
         parent.addView(
             button,
             LinearLayout.LayoutParams(
@@ -235,11 +347,7 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun showMessage(message: String) {
-        android.widget.Toast.makeText(
-            this,
-            message,
-            android.widget.Toast.LENGTH_LONG
-        ).show()
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 }
