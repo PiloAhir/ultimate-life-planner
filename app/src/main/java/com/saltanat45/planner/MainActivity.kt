@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.Gravity
 import android.view.ViewGroup
@@ -30,6 +31,9 @@ class MainActivity : Activity() {
 
     private val createBackupRequest = 1001
     private val restoreBackupRequest = 1002
+    private val imageRequest = 1003
+    private val videoRequest = 1004
+    private var pendingMediaTaskIndex = -1
 
     private var pendingBackup: String? = null
 
@@ -253,6 +257,7 @@ class MainActivity : Activity() {
                         put("notes", notes.text.toString().trim())
                         put("progress", 0)
                         put("status", "શરૂ કરવાનું બાકી")
+                        put("media", JSONArray())
                     }
 
                     tasks.add(task)
@@ -331,6 +336,14 @@ class MainActivity : Activity() {
             setText(task.optString("notes"))
         }
         form.addView(notes)
+        val mediaButton = Button(this).apply {
+            text = "📸 ફોટા અને વીડિયો મેનેજ કરો"
+            isAllCaps = false
+        }
+        form.addView(mediaButton)
+        mediaButton.setOnClickListener {
+            manageMedia(index)
+        }
 
         AlertDialog.Builder(this)
             .setTitle(task.optString("name"))
@@ -457,6 +470,33 @@ class MainActivity : Activity() {
         when (requestCode) {
             createBackupRequest -> writeBackup(uri)
             restoreBackupRequest -> readBackup(uri)
+        }
+        
+   imageRequest -> {
+        val index = pendingMediaTaskIndex
+        if (index >= 0) {
+            val clipData = data?.clipData
+
+            if (clipData != null) {
+                for (i in 0 until clipData.itemCount) {
+                    saveMediaReference(
+                        index,
+                        clipData.getItemAt(i).uri,
+                        "image"
+                    )
+                }
+            } else {
+                saveMediaReference(index, uri, "image")
+            }
+        }
+    }
+
+    videoRequest -> {
+        val index = pendingMediaTaskIndex
+        if (index >= 0) {
+            saveMediaReference(index, uri, "video")
+        }
+    }
         }
     }
 
@@ -587,4 +627,94 @@ class MainActivity : Activity() {
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
+    private fun manageMedia(index: Int) {
+    val options = arrayOf(
+        "📸 ફોટા પસંદ કરો",
+        "🎥 વીડિયો પસંદ કરો",
+        "📂 જોડેલી ફાઇલો જુઓ"
+    )
+
+    AlertDialog.Builder(this)
+        .setTitle("મીડિયા મેનેજ કરો")
+        .setItems(options) { _, choice ->
+            pendingMediaTaskIndex = index
+
+            when (choice) {
+                0 -> {
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "image/*"
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                    startActivityForResult(intent, imageRequest)
+                }
+
+                1 -> {
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "video/*"
+                    }
+                    startActivityForResult(intent, videoRequest)
+                }
+
+                2 -> showTaskMedia(index)
+            }
+        }
+        .setNegativeButton("બંધ", null)
+        .show()
+}
+    private fun saveMediaReference(index: Int, uri: Uri, type: String) {
+    try {
+        val task = tasks[index]
+        val media = task.optJSONArray("media") ?: JSONArray()
+
+        val item = JSONObject().apply {
+            put("uri", uri.toString())
+            put("type", type)
+            put("name", uri.lastPathSegment ?: "Media file")
+        }
+
+        media.put(item)
+        task.put("media", media)
+
+        saveTasks()
+        toast("મીડિયા ઉમેરાયું ✅")
+    } catch (e: Exception) {
+        toast("મીડિયા સાચવી શકાયું નથી: ${e.message}")
+    }
+}
+private fun showTaskMedia(index: Int) {
+    val media = tasks[index].optJSONArray("media") ?: JSONArray()
+
+    if (media.length() == 0) {
+        toast("આ કામ સાથે કોઈ ફોટો કે વીડિયો જોડાયેલો નથી.")
+        return
+    }
+
+    val items = Array(media.length()) { i ->
+        val item = media.getJSONObject(i)
+        val icon = if (item.optString("type") == "video") "🎥" else "📸"
+        "$icon ${item.optString("name")}"
+    }
+   AlertDialog.Builder(this)
+        .setTitle("જોડેલી ફાઇલો")
+        .setItems(items) { _, which ->
+            try {
+                val item = media.getJSONObject(which)
+                val uri = Uri.parse(item.getString("uri"))
+                val mime = if (item.optString("type") == "video") "video/*" else "image/*"
+
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mime)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                startActivity(intent)
+            } catch (e: Exception) {
+                toast("ફાઇલ ખોલી શકાયી નથી: ${e.message}")
+            }
+        }
+        .setNegativeButton("બંધ", null)
+        .show()
+}
 }
